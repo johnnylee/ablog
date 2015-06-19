@@ -15,6 +15,7 @@ import (
 	"time"
 )
 
+// The default root prefix is "/".
 var RootPrefix = "/"
 
 func Main() {
@@ -31,7 +32,7 @@ func Main() {
 	}
 
 	dir := NewDir(nil, "content", 0)
-	dir.Render(tmpl)
+	dir.render(tmpl)
 }
 
 // ----------------------------------------------------------------------------
@@ -53,54 +54,56 @@ func glob(pattern string) (matches []string) {
 
 // ----------------------------------------------------------------------------
 type ADir struct {
-	Parent *ADir // Parent directory.
-	Level  int   // The directory nesting level. 0 is root.
-
-	outPath string // The output path for the directory.
+	contentPath string // The path to directory under "content".
+	outPath     string // The output path for the directory.
 
 	RelPath string // The relative path in the output tree, no beginning "/".
+
+	Parent *ADir // Parent directory.
+	Level  int   // The directory nesting level. 0 is root.
 
 	Files []*AFile // Files in the directory.
 	Dirs  []*ADir  // Sub-directories.
 
-	FileTags []string // A sorted list of tags from files within the directory.
+	// Previous and next directories.
+	PrevDir *ADir
+	NextDir *ADir
+
+	// Sorted list of file tags in current directory, and recursively.
+	FileTags          []string
+	FileTagsRecursive []string
 }
 
 func NewDir(parent *ADir, dirPath string, level int) *ADir {
 	fmt.Println("Processing directory:", dirPath)
 
 	dir := ADir{}
-	dir.Parent = parent
-	dir.Level = level
+	dir.contentPath = dirPath
+	dir.outPath = filepath.Join("output", dirPath[7:])
+	fmt.Println("  Output path:", dir.outPath)
 
 	dir.RelPath = dirPath[7:]
 	for len(dir.RelPath) > 0 && dir.RelPath[0] == '/' {
 		dir.RelPath = dir.RelPath[1:]
 	}
-
 	fmt.Println("  Relative path:", dir.RelPath)
 
-	dir.outPath = filepath.Join("output", dir.RelPath)
-	fmt.Println("  Output path:", dir.outPath)
+	dir.Parent = parent
+	dir.Level = level
 
-	// Load pages.
-	for _, path := range glob(filepath.Join(dirPath, "*.md")) {
+	// Loading.
+	dir.loadFiles()
+	dir.loadDirs()
+	dir.loadTags()
+
+	return &dir
+}
+
+func (dir *ADir) loadFiles() {
+	for _, path := range glob(filepath.Join(dir.contentPath, "*.md")) {
 		fmt.Println("  Processing file:", path)
-		dir.Files = append(dir.Files, NewAFile(&dir, path))
+		dir.Files = append(dir.Files, NewAFile(dir, path))
 	}
-
-	// Load and sort tags.
-	var tags map[string]struct{}
-	for _, file := range dir.Files {
-		for _, tag := range file.Tags {
-			tags[tag] = struct{}{}
-		}
-	}
-
-	for k := range tags {
-		dir.FileTags = append(dir.FileTags, k)
-	}
-	sort.Strings(dir.FileTags)
 
 	// Set file prev/next pointers.
 	for i, file := range dir.Files {
@@ -111,19 +114,61 @@ func NewDir(parent *ADir, dirPath string, level int) *ADir {
 			file.NextFile = dir.Files[i+1]
 		}
 	}
+}
 
-	// Load dirs.
-	for _, path := range glob(filepath.Join(dirPath, "*/")) {
+func (dir *ADir) loadDirs() {
+	for _, path := range glob(filepath.Join(dir.contentPath, "*/")) {
 		if !util.IsDir(path) {
 			continue
 		}
-		dir.Dirs = append(dir.Dirs, NewDir(&dir, path, level+1))
+		dir.Dirs = append(dir.Dirs, NewDir(dir, path, dir.Level+1))
 	}
 
-	return &dir
+	// Set dir prev/next pointers.
+	for i, d := range dir.Dirs {
+		if i != 0 {
+			d.PrevDir = dir.Dirs[i-1]
+		}
+		if i < len(dir.Dirs)-1 {
+			d.NextDir = dir.Dirs[i+1]
+		}
+	}
 }
 
-// Get a sub-directory by name.
+func (dir *ADir) loadTags() {
+	fmt.Println("  Loading tags...")
+
+	distinct := func(tagsList ...[]string) (out []string) {
+		var m map[string]struct{}
+
+		for _, tags := range tagsList {
+			for _, tag := range tags {
+				m[tag] = struct{}{}
+			}
+		}
+
+		for k := range m {
+			out = append(out, k)
+		}
+		sort.Strings(out)
+		return
+	}
+
+	var tagsList [][]string
+	for _, file := range dir.Files {
+		tagsList = append(tagsList, file.Tags)
+	}
+
+	dir.FileTags = distinct(tagsList...)
+
+	for _, subDir := range dir.Dirs {
+		tagsList = append(tagsList, subDir.FileTagsRecursive)
+	}
+
+	dir.FileTagsRecursive = distinct(tagsList...)
+}
+
+// SubDir: Get a sub-directory by name.
 func (dir *ADir) SubDir(name string) *ADir {
 	for _, dir := range dir.Dirs {
 		if filepath.Base(dir.RelPath) == name {
@@ -133,17 +178,7 @@ func (dir *ADir) SubDir(name string) *ADir {
 	return nil
 }
 
-// Return all files in the directory having the given tag.
-func (dir *ADir) TaggedFiles(tag string) (files []*AFile) {
-	for _, file := range dir.Files {
-		if file.HasTag(tag) {
-			files = append(files, file)
-		}
-	}
-	return
-}
-
-// Return all files in the directory and subdirectories.
+// FilesRecursive: Return files in this and any sub directory.
 func (dir *ADir) FilesRecursive() (files []*AFile) {
 	files = append(files, dir.Files...)
 	for _, subDir := range dir.Dirs {
@@ -152,24 +187,55 @@ func (dir *ADir) FilesRecursive() (files []*AFile) {
 	return
 }
 
-func (dir *ADir) TaggedFilesRecursive(tag string) (files []*AFile) {
-	for _, file := range dir.FilesRecursive() {
-		if file.HasTag(tag) {
+// TaggedFilesAll: Return files in directory having all the given tags.
+func (dir *ADir) TaggedFilesAll(tags ...string) (files []*AFile) {
+	for _, file := range dir.Files {
+		if file.HasTagsAll(tags...) {
 			files = append(files, file)
 		}
 	}
 	return
 }
 
-func (dir *ADir) Render(tmpl *template.Template) {
+// TaggedFilesAllRecursive: Recursive version of TaggedFilesAll.
+func (dir *ADir) TaggedFilesAllRecursive(tags ...string) (files []*AFile) {
+	for _, file := range dir.FilesRecursive() {
+		if file.HasTagsAll(tags...) {
+			files = append(files, file)
+		}
+	}
+	return
+}
+
+// TaggedFilesAny: Return files in directory having any the given tags.
+func (dir *ADir) TaggedFilesAny(tags ...string) (files []*AFile) {
+	for _, file := range dir.Files {
+		if file.HasTagsAny(tags...) {
+			files = append(files, file)
+		}
+	}
+	return
+}
+
+// TaggedFilesAnyRecursive: Recursive version of TaggedFilesAny.
+func (dir *ADir) TaggedFilesAnyRecursive(tags ...string) (files []*AFile) {
+	for _, file := range dir.FilesRecursive() {
+		if file.HasTagsAny(tags...) {
+			files = append(files, file)
+		}
+	}
+	return
+}
+
+func (dir *ADir) render(tmpl *template.Template) {
 	fmt.Println("Rendering site...")
 
 	for _, file := range dir.Files {
-		file.Render(tmpl)
+		file.render(tmpl)
 	}
 
 	for _, subDir := range dir.Dirs {
-		subDir.Render(tmpl)
+		subDir.render(tmpl)
 	}
 }
 
@@ -235,6 +301,7 @@ func NewAFile(parent *ADir, mdPath string) *AFile {
 	return &file
 }
 
+// HasTag: Return true if the file has the given tag.
 func (file *AFile) HasTag(tag string) bool {
 	for _, t := range file.Tags {
 		if tag == t {
@@ -244,17 +311,57 @@ func (file *AFile) HasTag(tag string) bool {
 	return false
 }
 
+// HasTagsAll: Return true if the file has all the given tags.
+func (file *AFile) HasTagsAll(tags ...string) bool {
+	for _, t := range tags {
+		if !file.HasTag(t) {
+			return false
+		}
+	}
+	return true
+}
+
+// HasTagsAny: Return true if the file has any of the given tags.
+func (file *AFile) HasTagsAny(tags ...string) bool {
+	for _, t := range tags {
+		if file.HasTag(t) {
+			return true
+		}
+	}
+	return false
+}
+
+// BaseName: Return the bare html filename.
 func (file *AFile) BaseName() string {
 	return filepath.Base(file.outPath)
 }
 
+// FirstParagraph: Return the first paragraph of the file. The returned HTML
+// will contain the opening and closing <p> tags.
 func (file *AFile) FirstParagraph() template.HTML {
 	return template.HTML(
 		bytes.SplitAfterN(
 			[]byte(file.Content), []byte("</p>"), 2)[0])
 }
 
-func (file *AFile) Render(tmpl *template.Template) {
+// FormatCreated: Format the creation date using Go's date formatting function.
+// The reference time is "Mon Jan 2 15:04:05 MST 2006"
+func (file *AFile) FormatCreated(fmt string) string {
+	d := time.Date(
+		file.Created.Year, time.Month(file.Created.Month), file.Created.Day,
+		12, 0, 0, 0, time.UTC)
+	return d.Format(fmt)
+}
+
+// FormatModified: The same as FormatCreated, but for the modification date.
+func (file *AFile) FormatModified(fmt string) string {
+	d := time.Date(
+		file.Modified.Year, time.Month(file.Modified.Month), file.Modified.Day,
+		12, 0, 0, 0, time.UTC)
+	return d.Format(fmt)
+}
+
+func (file *AFile) render(tmpl *template.Template) {
 	fmt.Println("Rendering file:", file.mdPath)
 	fmt.Println("  Output path:", file.outPath)
 	fmt.Println("  Template:   ", file.Template)
@@ -274,19 +381,4 @@ func (file *AFile) Render(tmpl *template.Template) {
 	if err = tmpl.ExecuteTemplate(f, file.Template, file); err != nil {
 		exitErr(err, "Failed to render template: "+file.Template)
 	}
-}
-
-// Reference time is "Mon Jan 2 15:04:05 MST 2006"
-func (file *AFile) FormatCreated(fmt string) string {
-	d := time.Date(
-		file.Created.Year, time.Month(file.Created.Month), file.Created.Day,
-		12, 0, 0, 0, time.UTC)
-	return d.Format(fmt)
-}
-
-func (file *AFile) FormatModified(fmt string) string {
-	d := time.Date(
-		file.Modified.Year, time.Month(file.Modified.Month), file.Modified.Day,
-		12, 0, 0, 0, time.UTC)
-	return d.Format(fmt)
 }
