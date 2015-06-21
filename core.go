@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/johnnylee/util"
-	"github.com/russross/blackfriday"
-	"github.com/termie/go-shutil"
 	"html/template"
 	"io/ioutil"
 	"os"
@@ -22,14 +20,35 @@ func Main() {
 	// Remove output dir.
 	_ = os.RemoveAll("output")
 
+	// Walk content directory, copying directories and static content.
+	fmt.Println("Copying static content...")
+	walk := func(path string, info os.FileInfo, err error) error {
+		outPath := filepath.Join("output", path[7:])
+
+		if info.IsDir() {
+			fmt.Println("  Creating directory:", outPath)
+			if err := os.MkdirAll(outPath, 0777); err != nil {
+				exitErr(err, "Failed to create directory: "+outPath)
+			}
+			return nil
+		}
+
+		if path[len(path)-3:] != ".md" {
+			fmt.Println("  Linking file:", outPath)
+			if err := os.Link(path, outPath); err != nil {
+				exitErr(err, "Failed to link file: "+path)
+			}
+		}
+
+		return nil
+	}
+
+	if err := filepath.Walk("content", walk); err != nil {
+		exitErr(err, "Failed to walk content directory.")
+	}
+
 	// Load templates.
 	tmpl := template.Must(template.ParseGlob("template/*"))
-
-	// Move static content to output dir.
-	fmt.Println("Copying static content...")
-	if err := shutil.CopyTree("static", "output", nil); err != nil {
-		exitErr(err, "Failed to copy static content.")
-	}
 
 	dir := NewDir(nil, "content", 0)
 	dir.render(tmpl)
@@ -57,7 +76,7 @@ type ADir struct {
 	contentPath string // The path to directory under "content".
 	outPath     string // The output path for the directory.
 
-	RelPath string // The relative path in the output tree, no beginning "/".
+	RelPath string // The relative path in the output tree, beginning "/".
 
 	Parent *ADir // Parent directory.
 	Level  int   // The directory nesting level. 0 is root.
@@ -81,12 +100,6 @@ func NewDir(parent *ADir, dirPath string, level int) *ADir {
 	dir.contentPath = dirPath
 	dir.outPath = filepath.Join("output", dirPath[7:])
 	fmt.Println("  Output path:", dir.outPath)
-
-	dir.RelPath = dirPath[7:]
-	for len(dir.RelPath) > 0 && dir.RelPath[0] == '/' {
-		dir.RelPath = dir.RelPath[1:]
-	}
-	fmt.Println("  Relative path:", dir.RelPath)
 
 	dir.Parent = parent
 	dir.Level = level
@@ -171,7 +184,7 @@ func (dir *ADir) loadTags() {
 // SubDir: Get a sub-directory by name.
 func (dir *ADir) SubDir(name string) *ADir {
 	for _, dir := range dir.Dirs {
-		if filepath.Base(dir.RelPath) == name {
+		if filepath.Base(dir.outPath) == name {
 			return dir
 		}
 	}
@@ -228,7 +241,7 @@ func (dir *ADir) TaggedFilesAnyRecursive(tags ...string) (files []*AFile) {
 }
 
 func (dir *ADir) render(tmpl *template.Template) {
-	fmt.Println("Rendering site...")
+	fmt.Println("Rendering directory: " + dir.outPath)
 
 	for _, file := range dir.Files {
 		file.render(tmpl)
@@ -248,7 +261,6 @@ type AFile struct {
 	outPath string // The html output path.
 
 	Url        string // The URL of the rendered HTML file.
-	RelPath    string // The relative path of HTML file, no leading "/"
 	RootPrefix string // The root path prefix.
 
 	// Previous and next files in the directory.
@@ -282,7 +294,6 @@ func NewAFile(parent *ADir, mdPath string) *AFile {
 
 	file.Url = filepath.Join(RootPrefix, file.outPath[7:])
 	file.RootPrefix = RootPrefix
-	file.RelPath = filepath.Join(parent.RelPath, filepath.Base(file.outPath))
 
 	// Load metadata and content from markdown file.
 	data, err := ioutil.ReadFile(mdPath)
@@ -296,7 +307,9 @@ func NewAFile(parent *ADir, mdPath string) *AFile {
 	}
 
 	input := bytes.SplitAfterN(data, []byte("----"), 2)[1]
-	file.Content = template.HTML(blackfriday.MarkdownCommon(input))
+	//file.Content = template.HTML(blackfriday.MarkdownCommon(input))
+	//file.Content = template.HTML(github_flavored_markdown.Markdown(input))
+	file.Content = template.HTML(markdown(input))
 
 	return &file
 }
@@ -366,10 +379,6 @@ func (file *AFile) render(tmpl *template.Template) {
 	fmt.Println("  Output path:", file.outPath)
 	fmt.Println("  Template:   ", file.Template)
 	fmt.Println("  URL:        ", file.Url)
-	fmt.Println("  RelPath:    ", file.Url)
-
-	// Make sure the directory exists.
-	_ = os.MkdirAll(filepath.Dir(file.outPath), 0777)
 
 	// Open output file for writing.
 	f, err := os.Create(file.outPath)
