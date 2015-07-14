@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -260,8 +261,9 @@ type AFile struct {
 	mdPath  string // The path to the markdown content file.
 	outPath string // The html output path.
 
-	Url        string // The URL of the rendered HTML file.
-	RootPrefix string // The root path prefix.
+	Url          string // The URL of the rendered HTML file.
+	RootPrefix   string // The root path prefix.
+	RootRelative string // Relative path to root dir.
 
 	// Previous and next files in the directory.
 	PrevFile *AFile
@@ -294,6 +296,7 @@ func NewAFile(parent *ADir, mdPath string) *AFile {
 
 	file.Url = filepath.Join(RootPrefix, file.outPath[7:])
 	file.RootPrefix = RootPrefix
+	file.RootRelative = strings.Repeat("../", file.Level)
 
 	// Load metadata and content from markdown file.
 	data, err := ioutil.ReadFile(mdPath)
@@ -307,11 +310,17 @@ func NewAFile(parent *ADir, mdPath string) *AFile {
 	}
 
 	input := bytes.SplitAfterN(data, []byte("----"), 2)[1]
-	//file.Content = template.HTML(blackfriday.MarkdownCommon(input))
-	//file.Content = template.HTML(github_flavored_markdown.Markdown(input))
 	file.Content = template.HTML(markdown(input))
 
 	return &file
+}
+
+func (file *AFile) UrlRelative(baseFile *AFile) string {
+	path, err := filepath.Rel(baseFile.Parent.outPath, file.outPath)
+	if err != nil {
+		exitErr(err, "When computing relative path")
+	}
+	return path
 }
 
 // HasTag: Return true if the file has the given tag.

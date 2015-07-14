@@ -26,6 +26,11 @@ type Renderer struct {
 }
 
 func (r *Renderer) BlockCode(out *bytes.Buffer, text []byte, lang string) {
+	if len(lang) == 0 {
+		r.Html.BlockCode(out, text, lang)
+		return
+	}
+
 	var stderr bytes.Buffer
 
 	cmd := exec.Command("pygmentize", "-l"+lang, "-fhtml")
