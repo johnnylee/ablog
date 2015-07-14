@@ -58,7 +58,7 @@ type AFile struct {
 	PrevFile *AFile
 	NextFile *AFile
 
-	// The content rendered from the markdownfile.
+	// The content rendered from the markdown file.
 	Content template.HTML
 
 	// Meta-data from the markdown file below.
