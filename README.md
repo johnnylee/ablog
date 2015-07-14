@@ -77,26 +77,26 @@ type AFile struct {
 	UrlRelative(baseFile *AFile) string
 	
 	// HasTag: Return true if the file has the given tag.
-  HasTag(tag string) bool
+	HasTag(tag string) bool
 	
 	// HasTagsAll: Return true if the file has all the given tags.
-  HasTagsAll(tags ...string) bool
+  	HasTagsAll(tags ...string) bool
   
-  // HasTagsAny: Return true if the file has any of the given tags.
-  HasTagsAny(tags ...string) bool
+  	// HasTagsAny: Return true if the file has any of the given tags.
+	HasTagsAny(tags ...string) bool
 	
 	// BaseName: Return the bare html filename.
-  BaseName() string
+	BaseName() string
   
-  // FirstParagraph: Return the first paragraph of the file. The returned HTML
-  // will contain the opening and closing <p> tags.
-  FirstParagraph() template.HTML
+	// FirstParagraph: Return the first paragraph of the file. The returned HTML
+	// will contain the opening and closing <p> tags.
+	FirstParagraph() template.HTML
   
-  // FormatCreated: Format the creation date using Go's date formatting function.
-  // The reference time is "Mon Jan 2 15:04:05 MST 2006"
-  FormatCreated(fmt string) string
+	// FormatCreated: Format the creation date using Go's date formatting function.
+	// The reference time is "Mon Jan 2 15:04:05 MST 2006"
+	FormatCreated(fmt string) string
   
-  // FormatModified: The same as FormatCreated, but for the modification date.
-  FormatModified(fmt string) string
+	// FormatModified: The same as FormatCreated, but for the modification date.
+	FormatModified(fmt string) string
 }
 ```
