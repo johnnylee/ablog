@@ -43,7 +43,9 @@ The data in the header will be available in your templates.
 
 ## Template Context
 
-The context passed to each template when rendering a page is an `AFile` object: 
+The context passed to each template when rendering a page is an `AFile` object:
+
+### AFile
 
 ```go
 type AFile struct {
@@ -70,33 +72,56 @@ type AFile struct {
 	// Timestamps for creation / modification of the content.
 	Created  struct{ Year, Month, Day int }
 	Modified struct{ Year, Month, Day int }
-	
-	// A few functions are also available:
-	
-	// UrlRelative: Return the relative path to file from baseFile. 
-	UrlRelative(baseFile *AFile) string
-	
-	// HasTag: Return true if the file has the given tag.
-	HasTag(tag string) bool
-	
-	// HasTagsAll: Return true if the file has all the given tags.
-  	HasTagsAll(tags ...string) bool
-  
-  	// HasTagsAny: Return true if the file has any of the given tags.
-	HasTagsAny(tags ...string) bool
-	
-	// BaseName: Return the bare html filename.
-	BaseName() string
-  
-	// FirstParagraph: Return the first paragraph of the file. The returned HTML
-	// will contain the opening and closing <p> tags.
-	FirstParagraph() template.HTML
-  
-	// FormatCreated: Format the creation date using Go's date formatting function.
-	// The reference time is "Mon Jan 2 15:04:05 MST 2006"
-	FormatCreated(fmt string) string
-  
-	// FormatModified: The same as FormatCreated, but for the modification date.
-	FormatModified(fmt string) string
 }
+```
+
+```go 
+// UrlRelative: Return the relative path to file from baseFile. 
+UrlRelative(baseFile *AFile) string
+	
+// HasTag: Return true if the file has the given tag.
+HasTag(tag string) bool
+
+// HasTagsAll: Return true if the file has all the given tags.
+HasTagsAll(tags ...string) bool
+
+// HasTagsAny: Return true if the file has any of the given tags.
+HasTagsAny(tags ...string) bool
+
+// BaseName: Return the bare html filename.
+BaseName() string
+ 
+// FirstParagraph: Return the first paragraph of the file. The returned HTML
+// will contain the opening and closing <p> tags.
+FirstParagraph() template.HTML
+ 
+// FormatCreated: Format the creation date using Go's date formatting function.
+// The reference time is "Mon Jan 2 15:04:05 MST 2006"
+FormatCreated(fmt string) string
+  
+// FormatModified: The same as FormatCreated, but for the modification date.
+FormatModified(fmt string) string
+```
+
+### ADir
+
+```go
+type ADir struct {
+	RelPath string // The relative path in the output tree, beginning "/".
+
+	Parent *ADir // Parent directory.
+	Level  int   // The directory nesting level. 0 is root.
+
+	Files []*AFile // Files in the directory.
+	Dirs  []*ADir  // Sub-directories.
+
+	// Previous and next directories.
+	PrevDir *ADir
+	NextDir *ADir
+
+	// Sorted list of file tags in current directory, and recursively.
+	FileTags          []string
+	FileTagsRecursive []string
+}
+
 ```
