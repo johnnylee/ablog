@@ -75,6 +75,8 @@ type AFile struct {
 }
 ```
 
+#### Methods
+
 ```go 
 // UrlRelative: Return the relative path to file from baseFile. 
 UrlRelative(baseFile *AFile) string
@@ -123,5 +125,26 @@ type ADir struct {
 	FileTags          []string
 	FileTagsRecursive []string
 }
+```
 
+#### Methods
+
+```go
+// SubDir: Get a sub-directory by name.
+SubDir(name string) *ADir
+
+// FilesRecursive: Return files in this and any sub directory.
+FilesRecursive() (files []*AFile)
+
+// TaggedFilesAll: Return files in directory having all the given tags.
+TaggedFilesAll(tags ...string) (files []*AFile)
+
+// TaggedFilesAllRecursive: Recursive version of TaggedFilesAll.
+TaggedFilesAllRecursive(tags ...string) (files []*AFile)
+
+// TaggedFilesAny: Return files in directory having any the given tags.
+TaggedFilesAny(tags ...string) (files []*AFile)
+
+// TaggedFilesAnyRecursive: Recursive version of TaggedFilesAny.
+TaggedFilesAnyRecursive(tags ...string) (files []*AFile)
 ```
