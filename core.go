@@ -114,7 +114,7 @@ func NewDir(parent *ADir, dirPath string, level int) *ADir {
 }
 
 func (dir *ADir) loadFiles() {
-	for _, path := range glob(filepath.Join(dir.contentPath, "*.md")) {
+	for _, path := range glob(filepath.Join(dir.contentPath, "[^.]*.md")) {
 		fmt.Println("  Processing file:", path)
 		dir.Files = append(dir.Files, NewAFile(dir, path))
 	}
@@ -153,7 +153,7 @@ func (dir *ADir) loadTags() {
 	fmt.Println("  Loading tags...")
 
 	distinct := func(tagsList ...[]string) (out []string) {
-		var m map[string]struct{}
+		m := make(map[string]struct{})
 
 		for _, tags := range tagsList {
 			for _, tag := range tags {
@@ -269,7 +269,7 @@ type AFile struct {
 	PrevFile *AFile
 	NextFile *AFile
 
-	// The content rendered from the markdownfile.
+	// The content rendered from the markdown file.
 	Content template.HTML
 
 	// Meta-data from the markdown file below.
@@ -315,6 +315,7 @@ func NewAFile(parent *ADir, mdPath string) *AFile {
 	return &file
 }
 
+// UrlRelative: Return the relative path to file from baseFile. 
 func (file *AFile) UrlRelative(baseFile *AFile) string {
 	path, err := filepath.Rel(baseFile.Parent.outPath, file.outPath)
 	if err != nil {
